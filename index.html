@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>oliveR's lair</title>
+        <link href="style.css" rel="stylesheet" />
+        <link href="syntax.css" rel="stylesheet" />
+        <!--HTMX -->
+        <script
+            src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
+            integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
+            crossorigin="anonymous"
+        ></script>
+    </head>
+    <body>
+        <!-- Header part-->
+        <header>
+            <a id="title"><h2>oliveR's lair</h2></a>
+            <nav>
+                <a
+                    href="pages/home.html"
+                    hx-get="pages/home.html"
+                    hx-target="#main-content"
+					hx-swap="innerHTML transition:true"
+                    >Home</a
+                >
+                <a
+                    href="pages/projects.html"
+                    hx-get="pages/projects.html"
+                    hx-target="#main-content"
+					hx-swap="innerHTML transition:true"
+                    >Projects</a
+                >
+                <a
+                    href="pages/blog.html"
+                    hx-get="pages/blog.html"
+                    hx-target="#main-content"
+					hx-swap="innerHTML transition:true"
+                    >Blog</a
+                >
+            </nav>
+        </header>
+
+        <!-- Main content, maybe can be switched with htmx -->
+        <main
+            id="main-content"
+            hx-get="pages/home.html"
+            hx-trigger="load"
+        ></main>
+
+        <!-- Footer -->
+        <footer>
+            <small
+                >Ryan O. | Inspired by
+                <a href="https://github.com/clente/hugo-bearcub"
+                    >Bearcub</a
+                ></small
+            >
+        </footer>
+    </body>
+</html>
