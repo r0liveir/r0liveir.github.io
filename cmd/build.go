@@ -78,7 +78,20 @@ func main() {
 	renderProjects("../pages/projects.html", projects)
 }
 
+func shouldRebuild(src, dest string) bool {
+	sStat, err := os.Stat(src)
+	if err != nil { return false } // Src doesnt exist, nothing to build
+
+	dStat, err := os.Stat(dest)
+	if err != nil { return true } // Dest doesnt exist, must build
+
+	// return true if source was modified after dest file 
+	return sStat.ModTime().After(dStat.ModTime())
+}
+
 func buildSinglePage(srcPath, destPath string) {
+	if !shouldRebuild(srcPath, destPath) { return }
+
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
@@ -109,6 +122,7 @@ func buildSinglePage(srcPath, destPath string) {
 
 }
 
+// Processes blog directory
 func processDir(src, dest string) []Metadata {
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
@@ -130,11 +144,16 @@ func processDir(src, dest string) []Metadata {
 	files, _ := os.ReadDir(src)
 
 	for _, f := range files {
+		srcPath := filepath.Join(src, f.Name())
+		destPath := filepath.Join(dest, strings.TrimSuffix(f.Name(), ".md")+".html")
+	
+		if !shouldRebuild(srcPath, destPath) { continue }
+
 		if filepath.Ext(f.Name()) != ".md" {
 			continue
 		}
 
-		input, _ := os.ReadFile(filepath.Join(src, f.Name()))
+		input, _ := os.ReadFile(srcPath)
 		var meta Metadata
 		contentBytes, _ := frontmatter.Parse(bytes.NewReader(input), &meta)
 		var buf bytes.Buffer
@@ -143,7 +162,7 @@ func processDir(src, dest string) []Metadata {
 		// Adds a byline at start of post
 		byline := fmt.Sprintf("<p><i>%s · %s </i></p>\n<hr>", meta.Date, meta.Author)
 
-		meta.Slug = f.Name()[:len(f.Name())-3]
+		meta.Slug = strings.TrimSuffix(f.Name(), ".md")
 
 		finalContent := byline + buf.String()
 		outputFile := filepath.Join(dest, meta.Slug+".html")
