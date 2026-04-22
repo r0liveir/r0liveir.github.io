@@ -1,0 +1,12 @@
+<p><i>2026-04-21 · Oliver </i></p>
+<hr><p>Hello, welcome to the first post about DSL26's tutorials!</p>
+<h2>And so the journey begins</h2>
+<p>The first tutorial describes setting up a Linux kernel test environment using <code>QEMU</code>. The first time I tried it (during vacation), it was a mess... but mostly because I forgot to set the working directory to be <code>/home/lk-dev</code>, and instead it was in my user's home directory, which (to no suprise) messed up permissions, and before I realized, I had a VM with no connection.</p>
+<p>Other than that, it was pretty fine. Sure, the amount of new info thrown at you when first diving into this world is huuge, but FLUSP's team made sure to give a welcoming course, although I had some issues:</p>
+<ul>
+<li>The link for <strong>nocloud debian image</strong> wasn't working properly, so I had to get one by myself in <code>cloud.debian.org</code>. Specifically, I used <a href="https://cloud.debian.org/images/cloud/bookworm/20260210-2384/debian-12-nocloud-arm64-20260210-2384.qcow2">this one</a></li>
+<li>During step <strong>2.4 (use libvirst to streamline managing VMs)</strong>, i got an error regarding the <code>create_vm_virsh()</code> function, in which it said that <code>/dev/&lt;vdaX&gt;</code> (in my case, <code>vda2</code>) was not found. Searching more through this, i've found that this was due to a mismatch on how QEMU and libvirt handle default hardware. At the line <code>--disk path=&quot;${VM_DIR}/arm64_img.qcow2&quot;</code>, it wasn't told to use the <code>virtio</code> bus with <code>vda</code> as device target, which means the guest OS was seeing it under a different name (like <code>/dev/sda</code>). So i changed this line to <code>--disk path=&quot;${VM_DIR}/arm64_img.qcow2&quot;,bus=virtio,target=vda</code>.</li>
+<li>When configuring SSH, <code>sshd</code> service was not found. This was due to SSH service not being installed by default on this image, which was easily fixed by installing the <code>openssh-server</code> with <code>apt</code>.</li>
+</ul>
+<p>At last, we fetch the list of modules loaded in the guest kernel in order to save into a file and reduce Linux build time for the next tutorial.</p>
+<p>Thanks for reading!</p>

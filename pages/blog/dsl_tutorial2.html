@@ -1,0 +1,6 @@
+<p><i>2026-04-21 · Oliver </i></p>
+<hr><p>Hello, welcome to the second post about DSL26's tutorials!</p>
+<h2>Wandering kernel lands</h2>
+<p>In this tutorial, the premise was to compile the kernel using <strong>cross-compilation</strong> for the ARM architecture, and booting this custom kernel in a VM.</p>
+<p>In order to reduce build time, in Tutorial 1 we got the <code>vm_mod_list</code> file to make a minimal set of modules for compilation. Also, for the <strong>append to kernel release</strong> option, I went with <code>softwarelivre26</code>.</p>
+<p>It went pretty well, with almost no errors. During the proccess I've madesome silly mistakes, such as forgetting to <strong>install modules inside the VM</strong>, using <code>make ... modules_install</code>. But other than that, it went smoothly.</p>

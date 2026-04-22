@@ -1,0 +1,160 @@
+<p><i>2026-04-21 · Oliver </i></p>
+<hr><p>Hello, welcome to the fourth post about DSL26's tutorials!</p>
+<h2>Entering dungeons</h2>
+<p>The 4th tutorial was used to introduce character devices, abstractions that provide an interface for interacting with hardware or software components as a stream of files, and are located at the <code>/dev</code> directory. They're essentially files for communicating with hardware drivers, one byte at a time.</p>
+<p>I can say for sure that that this was the hardest tutorial to follow, with exercises being even harder to understand (where to start? what to do?). The follow-along part was pretty straightforward, but still hard to understand what was I doing.</p>
+<p>For the proposed exercises, the first one could be solved by employing the following line in the <code>simple_char_open</code> function:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;Device opened - Major %u and minor %u</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">imajor</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="n">iminor</span><span class="p">(</span><span class="n">inode</span><span class="p">));</span>
+</span></span></code></pre><p>Which would then print the major and minor device numbers. The second one was very hard, but eventually I found a solution (with a lil help of AI) that proposed the use of structs like the following:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">struct</span> <span class="n">device_data</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">cdev</span> <span class="n">s_cdev</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">char</span> <span class="o">*</span><span class="n">s_buf</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">size_t</span> <span class="n">size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">mutex</span> <span class="n">lock</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>Which would then be used to implement more than one device number and make it keep separate buffers for each of them. My solution was something like this:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/init.h&gt;</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/module.h&gt;</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/kdev_t.h&gt; /* for MAJOR and MINOR */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/cdev.h&gt; /* for cdev */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/fs.h&gt; /* for chrdev functions */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/slab.h&gt; /* for malloc */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/string.h&gt; /* for strlen() */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/uaccess.h&gt; /* copy_to_user() */</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp">#include</span> <span class="cpf">&lt;linux/mutex.h&gt; // For mutexes/locks</span><span class="cp">
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="c1">// Ex2: define a container struct for keeping separate buffers
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">struct</span> <span class="n">device_data</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">cdev</span> <span class="n">s_cdev</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">char</span> <span class="o">*</span><span class="n">s_buf</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">size_t</span> <span class="n">size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">mutex</span> <span class="n">lock</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="cp">#define S_BUFF_SIZE 4096
+</span></span></span><span class="line"><span class="cl"><span class="cp">#define MINOR_NUMS 2
+</span></span></span><span class="line"><span class="cl"><span class="cp"></span>
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">dev_t</span> <span class="n">dev_id</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="k">struct</span> <span class="n">device_data</span> <span class="o">*</span><span class="n">char_devices</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="nf">simple_char_open</span><span class="p">(</span><span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">device_data</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">data</span> <span class="o">=</span> <span class="n">container_of</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_cdev</span><span class="p">,</span> <span class="k">struct</span> <span class="n">device_data</span><span class="p">,</span> <span class="n">s_cdev</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="n">file</span><span class="o">-&gt;</span><span class="n">private_data</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="c1">// Exercise 1: modify this to print major and minor device numbers on device open
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;Device opened - Major %u and minor %u</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">imajor</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="n">iminor</span><span class="p">(</span><span class="n">inode</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;%s: %s</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">KBUILD_MODNAME</span><span class="p">,</span> <span class="n">__func__</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">ssize_t</span> <span class="nf">simple_char_read</span><span class="p">(</span><span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">char</span> <span class="n">__user</span> <span class="o">*</span><span class="n">buffer</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				<span class="n">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="n">loff_t</span> <span class="o">*</span><span class="n">ppos</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">device_data</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">private_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">int</span> <span class="n">n_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">mutex_lock_interruptible</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">))</span> <span class="k">return</span> <span class="o">-</span><span class="n">ERESTARTSYS</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;%s: %s about to read %ld bytes from buffer position %lld</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">		<span class="n">KBUILD_MODNAME</span><span class="p">,</span> <span class="n">__func__</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="o">*</span><span class="n">ppos</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">n_bytes</span> <span class="o">=</span> <span class="n">count</span> <span class="o">-</span> <span class="n">copy_to_user</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">data</span><span class="o">-&gt;</span><span class="n">s_buf</span> <span class="o">+</span> <span class="o">*</span><span class="n">ppos</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="o">*</span><span class="n">ppos</span> <span class="o">+=</span> <span class="n">n_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">n_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">ssize_t</span> <span class="nf">simple_char_write</span><span class="p">(</span><span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="n">__user</span> <span class="o">*</span><span class="n">buffer</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				<span class="n">size_t</span> <span class="n">count</span><span class="p">,</span> <span class="n">loff_t</span> <span class="o">*</span><span class="n">ppos</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">device_data</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">private_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">int</span> <span class="n">n_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">mutex_lock_interruptible</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">))</span> <span class="k">return</span> <span class="o">-</span><span class="n">ERESTARTSYS</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;%s: %s about to write %ld bytes to buffer position %lld</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">		<span class="n">KBUILD_MODNAME</span><span class="p">,</span> <span class="n">__func__</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="o">*</span><span class="n">ppos</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">n_bytes</span> <span class="o">=</span> <span class="n">count</span> <span class="o">-</span> <span class="n">copy_from_user</span><span class="p">(</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">s_buf</span> <span class="o">+</span> <span class="o">*</span><span class="n">ppos</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="n">mutex_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="n">n_bytes</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="nf">simple_char_release</span><span class="p">(</span><span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;%s: %s</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">KBUILD_MODNAME</span><span class="p">,</span> <span class="n">__func__</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">file_operations</span> <span class="n">simple_char_fops</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">owner</span> <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">open</span> <span class="o">=</span> <span class="n">simple_char_open</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">release</span> <span class="o">=</span> <span class="n">simple_char_release</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">read</span> <span class="o">=</span> <span class="n">simple_char_read</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">write</span> <span class="o">=</span> <span class="n">simple_char_write</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">simple_char_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;Initialize %s module.</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">KBUILD_MODNAME</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">ret</span> <span class="o">=</span> <span class="n">alloc_chrdev_region</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">MINOR_NUMS</span><span class="p">,</span> <span class="s">&#34;simple_char&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	
+</span></span><span class="line"><span class="cl">	<span class="n">char_devices</span> <span class="o">=</span> <span class="n">kmalloc_array</span><span class="p">(</span><span class="n">MINOR_NUMS</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">device_data</span><span class="p">),</span> <span class="n">GFP_KERNEL</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">char_devices</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">unregister_chrdev_region</span><span class="p">(</span><span class="n">dev_id</span><span class="p">,</span> <span class="n">MINOR_NUMS</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="c1">// Exercise 2
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MINOR_NUMS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">dev_t</span> <span class="n">dev_no</span> <span class="o">=</span> <span class="n">MKDEV</span><span class="p">(</span><span class="n">MAJOR</span><span class="p">(</span><span class="n">dev_id</span><span class="p">),</span> <span class="n">i</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_buf</span> <span class="o">=</span> <span class="n">kmalloc</span><span class="p">(</span><span class="n">S_BUFF_SIZE</span><span class="p">,</span> <span class="n">GFP_KERNEL</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">strcpy</span><span class="p">(</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_buf</span><span class="p">,</span> <span class="s">&#34;This is data from simple_char buffer.&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">mutex_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">lock</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="n">cdev_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_cdev</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">simple_char_fops</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_cdev</span><span class="p">.</span><span class="n">owner</span> <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="n">cdev_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_cdev</span><span class="p">,</span> <span class="n">dev_no</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>	
+</span></span><span class="line"><span class="cl">	
+</span></span><span class="line"><span class="cl">	<span class="c1">// For now, return 0
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span> <span class="n">__exit</span> <span class="nf">simple_char_exit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm">	 * Undoes the device ID mapping and frees cdev struct, removing the
+</span></span></span><span class="line"><span class="cl"><span class="cm">	 * character device from the system.
+</span></span></span><span class="line"><span class="cl"><span class="cm">	 */</span>
+</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MINOR_NUMS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="n">cdev_del</span><span class="p">(</span><span class="o">&amp;</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_cdev</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="n">kfree</span><span class="p">(</span><span class="n">char_devices</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">s_buf</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">	<span class="n">kfree</span><span class="p">(</span><span class="n">char_devices</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="cm">/* Unregisters (disassociate) the device numbers allocated. */</span>
+</span></span><span class="line"><span class="cl">	<span class="n">unregister_chrdev_region</span><span class="p">(</span><span class="n">dev_id</span><span class="p">,</span> <span class="n">MINOR_NUMS</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="n">pr_info</span><span class="p">(</span><span class="s">&#34;%s exiting.</span><span class="se">\n</span><span class="s">&#34;</span><span class="p">,</span> <span class="n">KBUILD_MODNAME</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">module_init</span><span class="p">(</span><span class="n">simple_char_init</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">module_exit</span><span class="p">(</span><span class="n">simple_char_exit</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="n">MODULE_AUTHOR</span><span class="p">(</span><span class="s">&#34;A Linux kernel student &lt;name.surname@usp.br&gt;&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">MODULE_DESCRIPTION</span><span class="p">(</span><span class="s">&#34;A simple character device driver example.&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="n">MODULE_LICENSE</span><span class="p">(</span><span class="s">&#34;GPL&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>Although it would be nice to say it worked, when I tested it, It gave some errors. But hey, it's a start! In the future I'll probably come back to this exercise.</p>
