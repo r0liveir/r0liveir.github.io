@@ -1,0 +1,67 @@
+<p><i>2026-05-10 · Oliver </i></p>
+<hr><p>Hello, welcome to the last post about DSL26 tutorials!</p>
+<h2>Some notes</h2>
+<p>Since tutorials 5 and 6 were focused on the &quot;Sending patches via email&quot; pipeline, I've decided not to make dedicated posts to them. Furthermore, tutorial 7 is, essentially, a showcase of the <code>iio_dummy</code> structure which we play with in tutorial 8, so naturally I didn't make a post for it as well.</p>
+<h2>Slashing dummies</h2>
+<p>For this tutorial, I've followed along on installing the <code>iio_dummy</code> module in order to test changes to it. During this tutorial, we've added 3 additional channels to represent three axis.</p>
+<p>Since the post's date, there has been some changes made to <code>iio_simple_dummy.c</code> file. When updating <code>*read_raw()</code> for handling new channels, i've found that the logic for reading raw channel data has been split into into a helper function called <code>__iio_dummy_read_raw()</code>. And this is where i've put the code for making data accessible to userspace, like this:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="nf">__iio_dummy_read_raw</span><span class="p">(</span><span class="k">struct</span> <span class="n">iio_dev</span> <span class="o">*</span><span class="n">indio_dev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				<span class="k">struct</span> <span class="n">iio_chan_spec</span> <span class="k">const</span> <span class="o">*</span><span class="n">chan</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				<span class="kt">int</span> <span class="o">*</span><span class="n">val</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">iio_dummy_state</span> <span class="o">*</span><span class="n">st</span> <span class="o">=</span> <span class="n">iio_priv</span><span class="p">(</span><span class="n">indio_dev</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="n">guard</span><span class="p">(</span><span class="n">mutex</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">st</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="p">(</span><span class="n">chan</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">IIO_VOLTAGE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">        <span class="p">...</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">IIO_MAGN</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="k">switch</span><span class="p">(</span><span class="n">chan</span><span class="o">-&gt;</span><span class="n">scan_index</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nl">DUMMY_MAGN_X</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">val</span> <span class="o">=</span> <span class="n">st</span><span class="o">-&gt;</span><span class="n">buffer_compass</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nl">DUMMY_MAGN_Y</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">val</span> <span class="o">=</span> <span class="n">st</span><span class="o">-&gt;</span><span class="n">buffer_compass</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nl">DUMMY_MAGN_Z</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">val</span> <span class="o">=</span> <span class="n">st</span><span class="o">-&gt;</span><span class="n">buffer_compass</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">			<span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="n">IIO_VAL_INT</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>Notice that since this function doesn't use <code>int ret</code> like the original, we return <code>IIO_VAL_INT</code> directly inside the switch statement. <code>iio_dummy_read_raw</code> now looks like this:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="nf">iio_dummy_read_raw</span><span class="p">(</span><span class="k">struct</span> <span class="n">iio_dev</span> <span class="o">*</span><span class="n">indio_dev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">			      <span class="k">struct</span> <span class="n">iio_chan_spec</span> <span class="k">const</span> <span class="o">*</span><span class="n">chan</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">			      <span class="kt">int</span> <span class="o">*</span><span class="n">val</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">			      <span class="kt">int</span> <span class="o">*</span><span class="n">val2</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">			      <span class="kt">long</span> <span class="n">mask</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">struct</span> <span class="n">iio_dummy_state</span> <span class="o">*</span><span class="n">st</span> <span class="o">=</span> <span class="n">iio_priv</span><span class="p">(</span><span class="n">indio_dev</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">	<span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="p">(</span><span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="p">...</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">IIO_CHAN_INFO_SCALE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="k">switch</span> <span class="p">(</span><span class="n">chan</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nl">IIO_VOLTAGE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="p">...</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nl">IIO_MAGN</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">val</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">			<span class="o">*</span><span class="n">val2</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">			<span class="n">ret</span> <span class="o">=</span> <span class="n">IIO_VAL_INT_PLUS_MICRO</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">			<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">			<span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">		<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>and with that, these new additions can be succesfully compiled and tested!</p>
