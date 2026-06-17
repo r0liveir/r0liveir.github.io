@@ -1,14 +1,14 @@
 /* Simple Go builder inspired by Hugo's functionalities
-   This assumes a website/ dir, with content/ and pages/ in it. 
-   Content should have a blog/ and a projects/, as well as a home.md, to build the HTML files 
+   This assumes a website/ dir, with content/ and pages/ in it.
+   Content should have a blog/ and a projects/, as well as a home.md, to build the HTML files
    Credits: Gemini AI
 */
 
 package main
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"html/template"
 	"os"
 	"path/filepath"
@@ -16,27 +16,27 @@ import (
 	"strings"
 
 	"github.com/adrg/frontmatter"
+	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/yuin/goldmark"
+	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
-	highlighting "github.com/yuin/goldmark-highlighting/v2"
-	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
 )
 
 type Metadata struct {
-	Title string   `yaml:"title"`
-	Date  string   `yaml:"date"`
-	Author string  `yaml:"author"`
-	Tags  []string `yaml:"tags"`
-	Slug  string
+	Title  string   `yaml:"title"`
+	Date   string   `yaml:"date"`
+	Author string   `yaml:"author"`
+	Tags   []string `yaml:"tags"`
+	Slug   string
 }
 
 type ProjectMetadata struct {
-	Title string `yaml:"title"`
-	Description string `yaml:"description"`
-	Tech []string `yaml:"tech"`
-	Source string `yaml:"source"`
-	Slug string
+	Title       string   `yaml:"title"`
+	Description string   `yaml:"description"`
+	Tech        []string `yaml:"tech"`
+	Source      string   `yaml:"source"`
+	Slug        string
 }
 
 type PageData struct {
@@ -45,7 +45,7 @@ type PageData struct {
 }
 
 func main() {
-	// Build single page 
+	// Build single page
 	buildSinglePage("../content/home.md", "../pages/home.html")
 
 	os.MkdirAll("../pages/blog", 0755)
@@ -56,7 +56,7 @@ func main() {
 	// group posts by tag and add Tags
 	tagMap := make(map[string][]Metadata)
 	allTags := make(map[string]bool)
-	
+
 	for _, post := range blogPosts {
 		for _, tag := range post.Tags {
 			tagMap[tag] = append(tagMap[tag], post)
@@ -69,28 +69,36 @@ func main() {
 	}
 
 	keys := make([]string, 0, len(allTags))
-	for k := range allTags { keys = append(keys, k)}
+	for k := range allTags {
+		keys = append(keys, k)
+	}
 	sort.Strings(keys)
 
 	render("../pages/blog.html", "", blogPosts, keys)
-	
+
 	projects := processProjectsDir("../content/projects")
 	renderProjects("../pages/projects.html", projects)
 }
 
 func shouldRebuild(src, dest string) bool {
 	sStat, err := os.Stat(src)
-	if err != nil { return false } // Src doesnt exist, nothing to build
+	if err != nil {
+		return false
+	} // Src doesnt exist, nothing to build
 
 	dStat, err := os.Stat(dest)
-	if err != nil { return true } // Dest doesnt exist, must build
+	if err != nil {
+		return true
+	} // Dest doesnt exist, must build
 
-	// return true if source was modified after dest file 
+	// return true if source was modified after dest file
 	return sStat.ModTime().After(dStat.ModTime())
 }
 
 func buildSinglePage(srcPath, destPath string) {
-	if !shouldRebuild(srcPath, destPath) { return }
+	if !shouldRebuild(srcPath, destPath) {
+		return
+	}
 
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
@@ -114,7 +122,7 @@ func buildSinglePage(srcPath, destPath string) {
 
 	var buf bytes.Buffer
 	markdown.Convert(contentBytes, &buf)
-	
+
 	final := fmt.Sprintf("<div><h1>%s</h1>%s</div>", meta.Title, buf.String())
 
 	os.MkdirAll(filepath.Dir(destPath), 0755)
@@ -141,34 +149,56 @@ func processDir(src, dest string) []Metadata {
 	)
 
 	var list []Metadata
-	files, _ := os.ReadDir(src)
+	files, err := os.ReadDir(src)
+	if err != nil {
+		fmt.Printf("Failed to read blog directory %s: %v\n", src, err)
+		return list
+	}
+
+	os.MkdirAll(dest, 0755)
 
 	for _, f := range files {
-		srcPath := filepath.Join(src, f.Name())
-		destPath := filepath.Join(dest, strings.TrimSuffix(f.Name(), ".md")+".html")
-	
-		if !shouldRebuild(srcPath, destPath) { continue }
-
 		if filepath.Ext(f.Name()) != ".md" {
 			continue
 		}
 
-		input, _ := os.ReadFile(srcPath)
+		srcPath := filepath.Join(src, f.Name())
+		destPath := filepath.Join(dest, strings.TrimSuffix(f.Name(), ".md")+".html")
+
+		input, err := os.ReadFile(srcPath)
+		if err != nil {
+			fmt.Printf("Failed to read blog post %s: %v\n", srcPath, err)
+			continue
+		}
+
 		var meta Metadata
-		contentBytes, _ := frontmatter.Parse(bytes.NewReader(input), &meta)
+		contentBytes, err := frontmatter.Parse(bytes.NewReader(input), &meta)
+		if err != nil {
+			fmt.Printf("Failed to parse frontmatter for %s: %v\n", srcPath, err)
+			continue
+		}
+
+		meta.Slug = strings.TrimSuffix(f.Name(), ".md")
+		list = append(list, meta)
+
+		if !shouldRebuild(srcPath, destPath) {
+			continue
+		}
+
 		var buf bytes.Buffer
-		markdown.Convert(contentBytes, &buf)
-		
+		if err := markdown.Convert(contentBytes, &buf); err != nil {
+			fmt.Printf("Failed to render markdown for %s: %v\n", srcPath, err)
+			continue
+		}
+
 		// Adds a byline at start of post
 		byline := fmt.Sprintf("<p><i>%s · %s </i></p>\n<hr>", meta.Date, meta.Author)
 
-		meta.Slug = strings.TrimSuffix(f.Name(), ".md")
-
 		finalContent := byline + buf.String()
 		outputFile := filepath.Join(dest, meta.Slug+".html")
-		os.WriteFile(outputFile, []byte(finalContent), 0644)
-
-		list = append(list, meta)
+		if err := os.WriteFile(outputFile, []byte(finalContent), 0644); err != nil {
+			fmt.Printf("Failed to write blog post %s: %v\n", outputFile, err)
+		}
 	}
 
 	sort.Slice(list, func(i, j int) bool { return list[i].Date > list[j].Date })
@@ -176,7 +206,7 @@ func processDir(src, dest string) []Metadata {
 }
 
 func render(destPath, title string, items []Metadata, footerTags []string) {
-    const listTmpl = `
+	const listTmpl = `
 {{if .Title }}
 <h1>{{.Title}}</h1>
 {{end}}
@@ -203,31 +233,31 @@ func render(destPath, title string, items []Metadata, footerTags []string) {
 </div>
 {{end}}`
 
-    // Define the template and the custom 'lower' function
-    t := template.Must(template.New("list").Funcs(template.FuncMap{
-        "lower": func(s string) string { 
-            return strings.ToLower(s) 
-        },
-    }).Parse(listTmpl))
+	// Define the template and the custom 'lower' function
+	t := template.Must(template.New("list").Funcs(template.FuncMap{
+		"lower": func(s string) string {
+			return strings.ToLower(s)
+		},
+	}).Parse(listTmpl))
 
-    // Create the output file
-    f, err := os.Create(destPath)
-    if err != nil {
-        fmt.Printf("Failed to create file %s: %v", destPath, err)
-        return
-    }
-    defer f.Close()
+	// Create the output file
+	f, err := os.Create(destPath)
+	if err != nil {
+		fmt.Printf("Failed to create file %s: %v", destPath, err)
+		return
+	}
+	defer f.Close()
 
-    // Pass all three pieces of data to the template
-    t.Execute(f, struct {
-        Title      string
-        Items      []Metadata
-        FooterTags []string
-    }{
-        Title:      title,
-        Items:      items,
-        FooterTags: footerTags,
-    })
+	// Pass all three pieces of data to the template
+	t.Execute(f, struct {
+		Title      string
+		Items      []Metadata
+		FooterTags []string
+	}{
+		Title:      title,
+		Items:      items,
+		FooterTags: footerTags,
+	})
 }
 
 func processProjectsDir(src string) []ProjectMetadata {
@@ -235,14 +265,18 @@ func processProjectsDir(src string) []ProjectMetadata {
 	files, _ := os.ReadDir(src)
 
 	for _, f := range files {
-		if filepath.Ext(f.Name()) != ".md" { continue }
+		if filepath.Ext(f.Name()) != ".md" {
+			continue
+		}
 
 		input, _ := os.ReadFile(filepath.Join(src, f.Name()))
 		var meta ProjectMetadata
-		
+
 		// Parse frontmatter
 		_, err := frontmatter.Parse(bytes.NewReader(input), &meta)
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 
 		list = append(list, meta)
 	}
@@ -278,7 +312,7 @@ func renderProjects(destPath string, projects []ProjectMetadata) {
 </div>`
 
 	t := template.Must(template.New("projects").Parse(projTmpl))
-	
+
 	// Ensure the parent directory exists
 	os.MkdirAll(filepath.Dir(destPath), 0755)
 
@@ -289,8 +323,8 @@ func renderProjects(destPath string, projects []ProjectMetadata) {
 	}
 	defer f.Close()
 
-	// Since .Description is already HTML, we need to tell Go's template engine 
-	// not to escape it. To do that easily without extra structs, 
+	// Since .Description is already HTML, we need to tell Go's template engine
+	// not to escape it. To do that easily without extra structs,
 	// we could cast it, but for a simple "Lair" setup, this is fine.
 	t.Execute(f, projects)
 }
