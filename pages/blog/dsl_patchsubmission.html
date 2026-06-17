@@ -1,0 +1,117 @@
+<p><i>2026-06-17 · Oliver </i></p>
+<hr><p>Hello, welcome to the last post of phase 1 of the Free Software Development Course.</p>
+<h2>Patch work</h2>
+<p>For this patch, my colleague and I decided to take a code duplication issue found under <code>drm/amdgpu</code>, which, under RiseUp issues list, is <strong>Duplication number 8</strong>, for the following two functions, with 100% similarity:</p>
+<ul>
+<li><code>gmc_v10_vm_fault_interrupt_state</code></li>
+<li><code>gmc_v12_0_vm_fault_interrupt_state</code></li>
+</ul>
+<p>These functions are related to the Graphic Memory Controller (GMC) part, while v10 and v12_0 refer to two controller versions. Taking a closer look at both functions:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span>
+</span></span><span class="line"><span class="cl"><span class="nf">gmc_v10_0_vm_fault_interrupt_state</span><span class="p">(</span><span class="k">struct</span> <span class="n">amdgpu_device</span> <span class="o">*</span><span class="n">adev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">struct</span> <span class="n">amdgpu_irq_src</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">enum</span> <span class="n">amdgpu_interrupt_state</span> <span class="n">state</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">AMDGPU_IRQ_STATE_DISABLE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* MM HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_MMHUB0</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* GFX HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* This works because this interrupt is only
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * enabled at init/resume and disabled in
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * fini/suspend, so the overall state doesn&#39;t
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * change over the course of suspend/resume.
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 */</span>
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">adev</span><span class="o">-&gt;</span><span class="n">in_s0ix</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">			<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_GFXHUB</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">AMDGPU_IRQ_STATE_ENABLE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* MM HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_MMHUB0</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">true</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* GFX HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* This works because this interrupt is only
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * enabled at init/resume and disabled in
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * fini/suspend, so the overall state doesn&#39;t
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * change over the course of suspend/resume.
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 */</span>
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">adev</span><span class="o">-&gt;</span><span class="n">in_s0ix</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">			<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_GFXHUB</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">true</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>as for the gmc v12 version, it is mostly the same, with one little detail (the <code>type</code> parameter here is being passed as <code>unsigned</code> instead of <code>unsigned int</code>):</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">int</span> <span class="nf">gmc_v12_0_vm_fault_interrupt_state</span><span class="p">(</span><span class="k">struct</span> <span class="n">amdgpu_device</span> <span class="o">*</span><span class="n">adev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">					      <span class="k">struct</span> <span class="n">amdgpu_irq_src</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">					      <span class="k">enum</span> <span class="n">amdgpu_interrupt_state</span> <span class="n">state</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><p>taking a look at where in these files the functions are used, we can see something akin to:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">amdgpu_irq_src_funcs</span> <span class="n">gmc_v12_0_irq_funcs</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">set</span> <span class="o">=</span> <span class="n">gmc_v12_0_vm_fault_interrupt_state</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">process</span> <span class="o">=</span> <span class="n">gmc_v12_0_process_interrupt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>and similar for gmc v10</p>
+<p>both types are essentially the same in C programming, thus, we can refactor this properly. Our proposed steps were then:</p>
+<ul>
+<li>Move <code>vm_fault_interrupt_state</code> functions into a helper <code>amdgpu_gmc_vm_fault_interrupt_state</code>, found under <code>amdgpu_gmc.c</code> file</li>
+<li>Update both <code>irq_funcs</code> from v10 and v12.0 to handle the new helper function</li>
+<li>Update <code>amdgpu_gmc.h</code> header file to insert this new function, so that both files can make use of it</li>
+</ul>
+<h1>Viewing the solution</h1>
+<p>This is how the solution turned out to be. Under <code>amdgpu_gmc.c</code>:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">amdgpu_gmc_vm_fault_interrupt_state</span><span class="p">(</span><span class="k">struct</span> <span class="n">amdgpu_device</span> <span class="o">*</span><span class="n">adev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">struct</span> <span class="n">amdgpu_irq_src</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">enum</span> <span class="n">amdgpu_interrupt_state</span> <span class="n">state</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">AMDGPU_IRQ_STATE_DISABLE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* MM HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_MMHUB0</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* GFX HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* This works because this interrupt is only
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * enabled at init/resume and disabled in
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * fini/suspend, so the overall state doesn&#39;t
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * change over the course of suspend/resume.
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 */</span>
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">adev</span><span class="o">-&gt;</span><span class="n">in_s0ix</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">			<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_GFXHUB</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">false</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="nl">AMDGPU_IRQ_STATE_ENABLE</span><span class="p">:</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* MM HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_MMHUB0</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">true</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* GFX HUB */</span>
+</span></span><span class="line"><span class="cl">		<span class="cm">/* This works because this interrupt is only
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * enabled at init/resume and disabled in
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * fini/suspend, so the overall state doesn&#39;t
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 * change over the course of suspend/resume.
+</span></span></span><span class="line"><span class="cl"><span class="cm">		 */</span>
+</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">adev</span><span class="o">-&gt;</span><span class="n">in_s0ix</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">			<span class="n">amdgpu_gmc_set_vm_fault_masks</span><span class="p">(</span><span class="n">adev</span><span class="p">,</span> <span class="n">AMDGPU_GFXHUB</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">true</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="k">default</span><span class="o">:</span>
+</span></span><span class="line"><span class="cl">		<span class="k">break</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">	<span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre><p>Under <code>amdgpu_gmc.h</code>:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="kt">int</span> <span class="nf">amdgpu_gmc_vm_fault_interrupt_state</span><span class="p">(</span><span class="k">struct</span> <span class="n">amdgpu_device</span> <span class="o">*</span><span class="n">adev</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">struct</span> <span class="n">amdgpu_irq_src</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">				   <span class="k">enum</span> <span class="n">amdgpu_interrupt_state</span> <span class="n">state</span><span class="p">);</span>
+</span></span></code></pre><p>And the two imports for the struct looked like:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">amdgpu_irq_src_funcs</span> <span class="n">gmc_v12_0_irq_funcs</span> <span class="o">=</span> <span class="p">{</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">set</span> <span class="o">=</span> <span class="n">gmc_v12_0_vm_fault_interrupt_state</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">	<span class="p">.</span><span class="n">set</span> <span class="o">=</span> <span class="n">amdgpu_gmc_vm_fault_interrupt_state</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"> 	<span class="p">.</span><span class="n">process</span> <span class="o">=</span> <span class="n">gmc_v12_0_process_interrupt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"> <span class="p">};</span>
+</span></span></code></pre><h1>Submitting the patch</h1>
+<p>With FLUSP Tutorial, environment configuration and patch submission with kw became pretty easy to understand and to implement. Following this, we've sent our patch in May, 20. So far, we heard no responses from the manteiners, thus i've sent out another patch with subject <code>PATCH RESEND</code> to ping again and, hopefully, hear feedback on our patch. We also plan on sending more patches in the future.</p>
+<h1>Overall experience</h1>
+<p>This initial experience with Linux contribution was pretty great! I look forward to submitting more patches in the future and, if an opportunity arises, contribute more with the Kernel and work with it professionally.</p>
