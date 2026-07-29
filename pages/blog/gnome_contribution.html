@@ -1,0 +1,697 @@
+<p><i>2026-07-28 · Oliver </i></p>
+<hr><p>Hello! Welcome to the last post of DSL26!</p>
+<p>In this final phase, our goal was to select a Linux-related open source project (such as KDE, GNOME, Git, Kworflow, etc) and
+work on an issue/collection of issues suited to Newcomers. Since the beginning, me and my colleague were eager to contribute
+to the GNOME project. Personally, it's what i use daily :)</p>
+<p>Looking through their GitLab instance, we've found some different projects and issues tagged for &quot;Newcomers&quot;, and we (among some
+other students, coincidentally), decided for an issue related to the <strong>GNOME</strong> Calendar application.</p>
+<h2>The problem</h2>
+<p>The issue, which you can see more of <a href="https://gitlab.gnome.org/GNOME/gnome-calendar/-/work_items/1092">here</a>, at a first glance, was that changing events in the month view (a simple dashboard) from one month to another does not enable the whole month grid cell to act as a drop target. Meaning: if you have a lot of events in one month and you wanted to move one more event, you'd wrestle a few seconds before finding out how to drag the event correctly to that cell.</p>
+<p>Pretty weird, right? The following GIF, produced by my colleague, may clear up what is happening.</p>
+<video class="post-video" controls preload="metadata" playsinline>
+    <source src="https://kaikycintra.com/static/gnome_calendar_broken.mp4" type="video/mp4">
+    Your browser does not support embedded video.
+  </video>
+
+<h2>All aboard</h2>
+<p>Our next step was to find out how could we find the code related to the issue, and work on the project. The <strong>Welcome to GNOME</strong> page gives us some directions to start out and their Code of Conduct. We can also find information specific to the Calendar app <a href="https://welcome.gnome.org/en/app/Calendar/">here</a>. We've also researched some info regarding general <a href="https://developer.gnome.org/documentation/index.html">GNOME development</a>, since they have shared design patterns across applications, defined by their Human Interface Guidelines.</p>
+<p>Initially, it is recommended to use the <strong>GNOME Builder</strong> application. It serves as an IDE for GNOME-related projects, with support for essential technologies such as GTK+, GLib, etc. At a first glance, it would seem that working purely with Nvim would be more straightforward and simple, but believe me, automating the build stage was way better than I thought. Most issues I had with the App is that I had to tackle app dependencies manually through flatpak, since it needs some nightly versions that, for some weird reason, were not download on the first popup message I received.</p>
+<p>Working through the issue, we've found the <em>Drag and Drop</em> page on Development <a href="https://developer.gnome.org/documentation/tutorials/drag-and-drop.html">Docs</a>, which has some snippets useful for laying out a foundation, or mental model.</p>
+<p>If you go to the <em>week view</em>* instead of the <em>month view</em>*, you can see that the issue does not exist there. So, our plan was to compare week's code implementation with month's implementation as an inspiration to our work. We then found the files that tackled drag and drop on the month, such as <code>src/gui/views/gcal-month-cell.c</code> and, for comparison, <code>src/gui/views/gcal-week-grid.c</code>. Below is the code for month's implementation as an example, for the drop approach (you can skip most of it, it's mostly for reference)</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// gcal-month-cell.c
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="nf">move_event</span> <span class="p">(</span><span class="n">GcalMonthCell</span>         <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GcalEvent</span><span class="p">)</span> <span class="n">changed_event</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">start_dt</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GTimeSpan</span> <span class="n">timespan</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalContext</span> <span class="o">*</span><span class="n">context</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GDateTime</span> <span class="o">*</span><span class="n">end_dt</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">diff</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">start_month</span><span class="p">,</span> <span class="n">current_month</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">start_year</span><span class="p">,</span> <span class="n">current_year</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"> <span class="err">*/</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kr">inline</span> <span class="n">gint</span>
+</span></span><span class="line"><span class="cl"><span class="n">get_parent_bin_height</span> <span class="p">(</span><span class="n">GtkWidget</span> <span class="o">*</span><span class="n">widget</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GtkWidget</span> <span class="o">*</span><span class="n">parent</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">parent</span> <span class="o">=</span> <span class="n">gtk_widget_get_parent</span> <span class="p">(</span><span class="n">widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_assert</span> <span class="p">(</span><span class="n">ADW_IS_BIN</span> <span class="p">(</span><span class="n">parent</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">gtk_widget_get_height</span> <span class="p">(</span><span class="n">parent</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">update_style_flags</span> <span class="p">(</span><span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">today</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">weekday</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Today */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">today</span> <span class="o">=</span> <span class="n">g_date_time_new_now_local</span> <span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gcal_date_time_compare_date</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">,</span> <span class="n">today</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">gtk_widget_add_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;today&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="n">gtk_widget_remove_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;today&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">weekday</span> <span class="o">=</span> <span class="n">g_date_time_get_day_of_week</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">is_workday</span> <span class="p">(</span><span class="n">weekday</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">gtk_widget_add_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;workday&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="n">gtk_widget_remove_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;workday&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">add_month_separators</span> <span class="p">(</span><span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">day_of_month</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_remove_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;separator-top&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_remove_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;separator-side&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">day_of_month</span> <span class="o">=</span> <span class="n">g_date_time_get_day_of_month</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">day_of_month</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span> <span class="n">day_of_month</span> <span class="o">&lt;=</span> <span class="n">N_WEEKDAYS</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_widget_add_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;separator-top&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">day_of_month</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_widget_add_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;separator-side&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_widget_add_css_class</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span> <span class="s">&#34;separator-top&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">move_event</span> <span class="p">(</span><span class="n">GcalMonthCell</span>         <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">            <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GcalEvent</span><span class="p">)</span> <span class="n">changed_event</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">start_dt</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GTimeSpan</span> <span class="n">timespan</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalContext</span> <span class="o">*</span><span class="n">context</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GDateTime</span> <span class="o">*</span><span class="n">end_dt</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">diff</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">start_month</span><span class="p">,</span> <span class="n">current_month</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">start_year</span><span class="p">,</span> <span class="n">current_year</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">changed_event</span> <span class="o">=</span> <span class="n">gcal_event_new_from_event</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Move the event&#39;s date */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">start_dt</span> <span class="o">=</span> <span class="n">gcal_event_get_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">end_dt</span> <span class="o">=</span> <span class="n">gcal_event_get_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">start_month</span> <span class="o">=</span> <span class="n">g_date_time_get_month</span> <span class="p">(</span><span class="n">start_dt</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">start_year</span> <span class="o">=</span> <span class="n">g_date_time_get_year</span> <span class="p">(</span><span class="n">start_dt</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">current_month</span> <span class="o">=</span> <span class="n">g_date_time_get_month</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">current_year</span> <span class="o">=</span> <span class="n">g_date_time_get_year</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">timespan</span> <span class="o">=</span> <span class="n">g_date_time_difference</span> <span class="p">(</span><span class="n">end_dt</span><span class="p">,</span> <span class="n">start_dt</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">start_dt</span> <span class="o">=</span> <span class="n">g_date_time_add_full</span> <span class="p">(</span><span class="n">start_dt</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="n">current_year</span> <span class="o">-</span> <span class="n">start_year</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="n">current_month</span> <span class="o">-</span> <span class="n">start_month</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                   <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">diff</span> <span class="o">=</span> <span class="n">gcal_date_time_compare_date</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">,</span> <span class="n">start_dt</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">diff</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">new_start</span> <span class="o">=</span> <span class="n">g_date_time_add_days</span> <span class="p">(</span><span class="n">start_dt</span><span class="p">,</span> <span class="n">diff</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_event_set_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">new_start</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="cm">/* The event may have a NULL end date, so we have to check it here */</span>
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="p">(</span><span class="n">end_dt</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">new_end</span> <span class="o">=</span> <span class="n">g_date_time_add</span> <span class="p">(</span><span class="n">new_start</span><span class="p">,</span> <span class="n">timespan</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">          <span class="n">gcal_event_set_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">new_end</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">context</span> <span class="o">=</span> <span class="n">gcal_application_get_context</span> <span class="p">(</span><span class="n">GCAL_DEFAULT_APPLICATION</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_manager_update_event</span> <span class="p">(</span><span class="n">gcal_context_get_manager</span> <span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">changed_event</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="o">&lt;</span><span class="n">code</span> <span class="n">redacted</span> <span class="n">here</span> <span class="p">...</span><span class="o">&gt;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_accept_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GdkDrop</span>       <span class="o">*</span><span class="n">drop</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">((</span><span class="n">gdk_drop_get_actions</span> <span class="p">(</span><span class="n">drop</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">gtk_drop_target_get_actions</span> <span class="p">(</span><span class="n">drop_target</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">gdk_content_formats_contain_gtype</span> <span class="p">(</span><span class="n">gdk_drop_get_formats</span> <span class="p">(</span><span class="n">drop</span><span class="p">),</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_ask_recurrence_response_cb</span> <span class="p">(</span><span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">gpointer</span>               <span class="n">user_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span> <span class="o">=</span> <span class="n">GCAL_MONTH_CELL</span> <span class="p">(</span><span class="n">user_data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="k">const</span> <span class="n">gchar</span> <span class="o">*</span><span class="n">temp_str</span><span class="p">;</span>  <span class="cm">/* unowned */</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">icon_name</span> <span class="o">=</span> <span class="n">gcal_weather_info_get_icon_name</span> <span class="p">(</span><span class="n">weather_info</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">temp_str</span> <span class="o">=</span> <span class="n">gcal_weather_info_get_temperature</span> <span class="p">(</span><span class="n">weather_info</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_image_set_from_icon_name</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">weather_icon</span><span class="p">,</span> <span class="n">icon_name</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_label_set_text</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">temp_label</span><span class="p">,</span> <span class="n">temp_str</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="cm">/* Use a short month name label to avoid conflicting with the weather forecast&#39;s labels */</span>
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="p">(</span><span class="n">day_of_month</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">g_autofree</span> <span class="n">gchar</span> <span class="o">*</span><span class="n">month_name</span> <span class="o">=</span> <span class="n">g_date_time_format</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">,</span> <span class="s">&#34;%b&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="n">gtk_label_set_text</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">day_label</span><span class="p">,</span> <span class="n">month_name</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_image_clear</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">weather_icon</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gtk_label_set_text</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">temp_label</span><span class="p">,</span> <span class="s">&#34;&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="cm">/* No risk of conflicting with the weather forecast labels in their absence, use the full month name label */</span>
+</span></span><span class="line"><span class="cl">      <span class="k">if</span> <span class="p">(</span><span class="n">day_of_month</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">          <span class="n">g_autofree</span> <span class="n">gchar</span> <span class="o">*</span><span class="n">month_name</span> <span class="o">=</span> <span class="n">g_date_time_format</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">date</span><span class="p">,</span> <span class="s">&#34;%OB&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">          <span class="n">gtk_label_set_text</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">day_label</span><span class="p">,</span> <span class="n">month_name</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm"> * Callbacks
+</span></span></span><span class="line"><span class="cl"><span class="cm"> */</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="nf">day_changed_cb</span> <span class="p">(</span><span class="n">GcalClock</span>     <span class="o">*</span><span class="n">clock</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">update_style_flags</span> <span class="p">(</span><span class="n">self</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="nf">overflow_button_clicked_cb</span> <span class="p">(</span><span class="n">GtkWidget</span>     <span class="o">*</span><span class="n">button</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                            <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_signal_emit</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">signals</span><span class="p">[</span><span class="n">SHOW_OVERFLOW</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">button</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="nf">on_drop_target_accept_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GdkDrop</span>       <span class="o">*</span><span class="n">drop</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">((</span><span class="n">gdk_drop_get_actions</span> <span class="p">(</span><span class="n">drop</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">gtk_drop_target_get_actions</span> <span class="p">(</span><span class="n">drop_target</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">gdk_content_formats_contain_gtype</span> <span class="p">(</span><span class="n">gdk_drop_get_formats</span> <span class="p">(</span><span class="n">drop</span><span class="p">),</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="nf">on_ask_recurrence_response_cb</span> <span class="p">(</span><span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">gpointer</span>               <span class="n">user_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span> <span class="o">=</span> <span class="n">GCAL_MONTH_CELL</span> <span class="p">(</span><span class="n">user_data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">mod_type</span> <span class="o">!=</span> <span class="n">GCAL_RECURRENCE_MOD_NONE</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">move_event</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="nf">on_drop_target_drop_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">const</span> <span class="n">GValue</span>  <span class="o">*</span><span class="n">value</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">GcalMonthCell</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEventWidget</span> <span class="o">*</span><span class="n">event_widget</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEvent</span> <span class="o">*</span><span class="n">event</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">G_VALUE_HOLDS</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">event_widget</span> <span class="o">=</span> <span class="n">g_value_get_object</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">event</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_event</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gcal_event_has_recurrence</span> <span class="p">(</span><span class="n">event</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_utils_ask_recurrence_modification_type</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">FALSE</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">on_ask_recurrence_response_cb</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">self</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">move_event</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">GCAL_RECURRENCE_MOD_THIS_ONLY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>and below, for week implementation:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="nf">move_event_to_cell</span> <span class="p">(</span><span class="n">GcalWeekGrid</span>          <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">guint</span>                  <span class="n">cell</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalContext</span> <span class="o">*</span><span class="n">context</span> <span class="o">=</span> <span class="n">gcal_application_get_context</span> <span class="p">(</span><span class="n">GCAL_DEFAULT_APPLICATION</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">week_start</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">dnd_date</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">new_end</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GcalEvent</span><span class="p">)</span> <span class="n">changed_event</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GTimeSpan</span> <span class="n">timespan</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* RTL languages swap the drop cell column */</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gtk_widget_get_direction</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">))</span> <span class="o">==</span> <span class="n">GTK_TEXT_DIR_RTL</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gint</span> <span class="n">column</span><span class="p">,</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">column</span> <span class="o">=</span> <span class="n">cell</span> <span class="o">/</span> <span class="p">(</span><span class="n">MINUTES_PER_DAY</span> <span class="o">/</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">row</span> <span class="o">=</span> <span class="n">cell</span> <span class="o">-</span> <span class="n">column</span> <span class="o">*</span> <span class="mi">48</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">cell</span> <span class="o">=</span> <span class="p">(</span><span class="n">N_WEEKDAYS</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">column</span><span class="p">)</span> <span class="o">*</span> <span class="mi">48</span> <span class="o">+</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">      <span class="n">start</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="n">start_cell</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">end</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="p">(</span><span class="n">end_cell</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">guint</span> <span class="n">rtl_start_cell</span><span class="p">,</span> <span class="n">rtl_end_cell</span><span class="p">,</span> <span class="n">rtl_column</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="cm">/* Fix the minute */</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtl_column</span> <span class="o">=</span> <span class="n">N_WEEKDAYS</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">column</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtl_start_cell</span> <span class="o">=</span> <span class="n">start_cell</span> <span class="o">+</span> <span class="p">(</span><span class="n">rtl_column</span> <span class="o">-</span> <span class="n">column</span><span class="p">)</span> <span class="o">*</span> <span class="mi">48</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtl_end_cell</span> <span class="o">=</span> <span class="p">(</span><span class="n">rtl_column</span> <span class="o">*</span> <span class="n">MINUTES_PER_DAY</span> <span class="o">+</span> <span class="n">minute</span><span class="p">)</span> <span class="o">/</span> <span class="mi">30</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">start</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="n">rtl_start_cell</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">end</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="p">(</span><span class="n">rtl_end_cell</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">local_x</span> <span class="o">=</span> <span class="n">round</span> <span class="p">((</span><span class="n">column</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">gtk_widget_get_width</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="kt">float</span><span class="p">)</span> <span class="n">N_WEEKDAYS</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">  <span class="n">local_y</span> <span class="o">=</span> <span class="p">(</span><span class="n">minute</span> <span class="o">+</span> <span class="mi">15</span><span class="p">)</span> <span class="o">*</span> <span class="n">minute_height</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">gtk_widget_compute_point</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                 <span class="n">weekview</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                 <span class="o">&amp;</span><span class="n">GRAPHENE_POINT_INIT</span> <span class="p">(</span><span class="n">local_x</span><span class="p">,</span> <span class="n">local_y</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                 <span class="o">&amp;</span><span class="n">out</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">g_assert_not_reached</span> <span class="p">();</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">range</span> <span class="o">=</span> <span class="n">gcal_range_new</span> <span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">GCAL_RANGE_DEFAULT</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_view_create_event</span> <span class="p">(</span><span class="n">GCAL_VIEW</span> <span class="p">(</span><span class="n">weekview</span><span class="p">),</span> <span class="n">range</span><span class="p">,</span> <span class="n">out</span><span class="p">.</span><span class="n">x</span><span class="p">,</span> <span class="n">out</span><span class="p">.</span><span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_event_controller_set_propagation_phase</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">motion_controller</span><span class="p">,</span> <span class="n">GTK_PHASE_NONE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gint</span>
+</span></span><span class="line"><span class="cl"><span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">GcalWeekGrid</span> <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">              <span class="n">gdouble</span>       <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">              <span class="n">gdouble</span>       <span class="n">y</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gdouble</span> <span class="n">column_width</span><span class="p">,</span> <span class="n">cell_height</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">column</span><span class="p">,</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">column_width</span> <span class="o">=</span> <span class="n">gtk_widget_get_width</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="kt">float</span><span class="p">)</span> <span class="n">N_WEEKDAYS</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">cell_height</span> <span class="o">=</span> <span class="n">gtk_widget_get_height</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">))</span> <span class="o">/</span> <span class="mf">48.0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">column</span> <span class="o">=</span> <span class="n">floor</span> <span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="n">column_width</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">row</span> <span class="o">=</span> <span class="n">y</span> <span class="o">/</span> <span class="n">cell_height</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">column</span> <span class="o">*</span> <span class="mi">48</span> <span class="o">+</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">move_event_to_cell</span> <span class="p">(</span><span class="n">GcalWeekGrid</span>          <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">guint</span>                  <span class="n">cell</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                    <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalContext</span> <span class="o">*</span><span class="n">context</span> <span class="o">=</span> <span class="n">gcal_application_get_context</span> <span class="p">(</span><span class="n">GCAL_DEFAULT_APPLICATION</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">week_start</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">dnd_date</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">new_end</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GcalEvent</span><span class="p">)</span> <span class="n">changed_event</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GTimeSpan</span> <span class="n">timespan</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* RTL languages swap the drop cell column */</span>
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gtk_widget_get_direction</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">))</span> <span class="o">==</span> <span class="n">GTK_TEXT_DIR_RTL</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">gint</span> <span class="n">column</span><span class="p">,</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">column</span> <span class="o">=</span> <span class="n">cell</span> <span class="o">/</span> <span class="p">(</span><span class="n">MINUTES_PER_DAY</span> <span class="o">/</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">row</span> <span class="o">=</span> <span class="n">cell</span> <span class="o">-</span> <span class="n">column</span> <span class="o">*</span> <span class="mi">48</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">cell</span> <span class="o">=</span> <span class="p">(</span><span class="n">N_WEEKDAYS</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">column</span><span class="p">)</span> <span class="o">*</span> <span class="mi">48</span> <span class="o">+</span> <span class="n">row</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">changed_event</span> <span class="o">=</span> <span class="n">gcal_event_new_from_event</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">week_start</span> <span class="o">=</span> <span class="n">gcal_date_time_get_start_of_week</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">active_date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">dnd_date</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="n">cell</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * Calculate the diff between the dropped cell and the event&#39;s start date,
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * so we can update the end date accordingly.
+</span></span></span><span class="line"><span class="cl"><span class="cm">   */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">timespan</span> <span class="o">=</span> <span class="n">g_date_time_difference</span> <span class="p">(</span><span class="n">gcal_event_get_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">),</span> <span class="n">gcal_event_get_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * Set the event&#39;s start and end dates. Since the event may have a
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * NULL end date, so we have to check it here
+</span></span></span><span class="line"><span class="cl"><span class="cm">   */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_all_day</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">dnd_date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Setup the new end date */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">new_end</span> <span class="o">=</span> <span class="n">g_date_time_add</span> <span class="p">(</span><span class="n">dnd_date</span><span class="p">,</span> <span class="n">timespan</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">new_end</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Commit the changes */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_manager_update_event</span> <span class="p">(</span><span class="n">gcal_context_get_manager</span> <span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">changed_event</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_ask_recurrence_response_cb</span> <span class="p">(</span><span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">gpointer</span>               <span class="n">user_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">DropData</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">user_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">mod_type</span> <span class="o">!=</span> <span class="n">GCAL_RECURRENCE_MOD_NONE</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">move_event_to_cell</span> <span class="p">(</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">self</span><span class="p">,</span> <span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">,</span> <span class="n">data</span><span class="o">-&gt;</span><span class="n">drop_cell</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">g_clear_object</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_clear_pointer</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="p">,</span> <span class="n">g_free</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_drop_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">const</span> <span class="n">GValue</span>  <span class="o">*</span><span class="n">value</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEventWidget</span> <span class="o">*</span><span class="n">event_widget</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEvent</span> <span class="o">*</span><span class="n">event</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">cell</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">G_VALUE_HOLDS</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">cell</span> <span class="o">=</span> <span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event_widget</span> <span class="o">=</span> <span class="n">g_value_get_object</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_event</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gcal_event_has_recurrence</span> <span class="p">(</span><span class="n">event</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">DropData</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">data</span> <span class="o">=</span> <span class="n">g_new0</span> <span class="p">(</span><span class="n">DropData</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">self</span> <span class="o">=</span> <span class="n">self</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span> <span class="o">=</span> <span class="n">g_object_ref</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">drop_cell</span> <span class="o">=</span> <span class="n">cell</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_utils_ask_recurrence_modification_type</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">changed_event</span> <span class="o">=</span> <span class="n">gcal_event_new_from_event</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">week_start</span> <span class="o">=</span> <span class="n">gcal_date_time_get_start_of_week</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">active_date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">dnd_date</span> <span class="o">=</span> <span class="n">gcal_date_time_add_floating_minutes</span> <span class="p">(</span><span class="n">week_start</span><span class="p">,</span> <span class="n">cell</span> <span class="o">*</span> <span class="mi">30</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * Calculate the diff between the dropped cell and the event&#39;s start date,
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * so we can update the end date accordingly.
+</span></span></span><span class="line"><span class="cl"><span class="cm">   */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">timespan</span> <span class="o">=</span> <span class="n">g_date_time_difference</span> <span class="p">(</span><span class="n">gcal_event_get_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">),</span> <span class="n">gcal_event_get_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/*
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * Set the event&#39;s start and end dates. Since the event may have a
+</span></span></span><span class="line"><span class="cl"><span class="cm">   * NULL end date, so we have to check it here
+</span></span></span><span class="line"><span class="cl"><span class="cm">   */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_all_day</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_date_start</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">dnd_date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Setup the new end date */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">new_end</span> <span class="o">=</span> <span class="n">g_date_time_add</span> <span class="p">(</span><span class="n">dnd_date</span><span class="p">,</span> <span class="n">timespan</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_event_set_date_end</span> <span class="p">(</span><span class="n">changed_event</span><span class="p">,</span> <span class="n">new_end</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="cm">/* Commit the changes */</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gcal_manager_update_event</span> <span class="p">(</span><span class="n">gcal_context_get_manager</span> <span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">changed_event</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_ask_recurrence_response_cb</span> <span class="p">(</span><span class="n">GcalEvent</span>             <span class="o">*</span><span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">GcalRecurrenceModType</span>  <span class="n">mod_type</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                               <span class="n">gpointer</span>               <span class="n">user_data</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">DropData</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">user_data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">mod_type</span> <span class="o">!=</span> <span class="n">GCAL_RECURRENCE_MOD_NONE</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="n">move_event_to_cell</span> <span class="p">(</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">self</span><span class="p">,</span> <span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">,</span> <span class="n">data</span><span class="o">-&gt;</span><span class="n">drop_cell</span><span class="p">,</span> <span class="n">mod_type</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">g_clear_object</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">g_clear_pointer</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="p">,</span> <span class="n">g_free</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_drop_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">const</span> <span class="n">GValue</span>  <span class="o">*</span><span class="n">value</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEventWidget</span> <span class="o">*</span><span class="n">event_widget</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEvent</span> <span class="o">*</span><span class="n">event</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">cell</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">G_VALUE_HOLDS</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">cell</span> <span class="o">=</span> <span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event_widget</span> <span class="o">=</span> <span class="n">g_value_get_object</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_event</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gcal_event_has_recurrence</span> <span class="p">(</span><span class="n">event</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">DropData</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">data</span> <span class="o">=</span> <span class="n">g_new0</span> <span class="p">(</span><span class="n">DropData</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">self</span> <span class="o">=</span> <span class="n">self</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span> <span class="o">=</span> <span class="n">g_object_ref</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">drop_cell</span> <span class="o">=</span> <span class="n">cell</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_utils_ask_recurrence_modification_type</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">FALSE</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">on_ask_recurrence_response_cb</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">move_event_to_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">cell</span><span class="p">,</span> <span class="n">GCAL_RECURRENCE_MOD_THIS_ONLY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">GdkDragAction</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_enter_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                         <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                         <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                         <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">cell</span> <span class="o">=</span> <span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_set_visible</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">widget</span><span class="p">,</span> <span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">GDK_ACTION_COPY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_leave_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                         <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">cell</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_set_visible</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">widget</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_EXIT</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">static</span> <span class="n">GdkDragAction</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_motion_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEventWidget</span> <span class="o">*</span><span class="n">event_widget</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="k">const</span> <span class="n">GValue</span> <span class="o">*</span><span class="n">value</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GDateTime</span> <span class="o">*</span><span class="n">start</span><span class="p">,</span> <span class="o">*</span><span class="n">end</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">cell</span> <span class="o">=</span> <span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">value</span> <span class="o">=</span> <span class="n">gtk_drop_target_get_value</span> <span class="p">(</span><span class="n">drop_target</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event_widget</span> <span class="o">=</span> <span class="n">g_value_get_object</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">start</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_date_start</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">end</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_date_end</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd</span><span class="p">.</span><span class="n">event_minutes</span> <span class="o">=</span> <span class="n">g_date_time_difference</span> <span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="n">start</span><span class="p">)</span> <span class="o">/</span> <span class="n">G_TIME_SPAN_MINUTE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_queue_allocate</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">GDK_ACTION_COPY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>Well...Now that you skipped it, the core issue is that the drop target, on the <code>on_drop_target_drop_cb</code> function, is attached to individual day cells (<code>GcalMonthCell</code>), which is actually a container that holds internal child widgets (such as event labels). According to research done with LLMs, in GTK 4 (to understand more about the context), any child widgets inside a container capture input events and create their our bounds, which causes the child widgets to capture our drag and drop action. Since the drop is registered on the parent cell and not on childs, this makes the action be missed entirely.</p>
+<p>You can see more on the implementation using week grid, is that it uses a documentation more on par with GNOME's own implementation for drag and drop. Specifically, the target drop function uses <em>x</em> and <em>y</em> coordinates that target the mouse cursor. Also, instead of attaching a drop target to all individual cells, it is attached to one giant canvas (<code>GcalWeekGrid</code>). You can compare the difference between the two functions, but a main difference is this:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// Week implementation
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="nf">on_drop_target_drop_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">const</span> <span class="n">GValue</span>  <span class="o">*</span><span class="n">value</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">GcalWeekGrid</span>  <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// ...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="c1">// at some point, it uses the x and y coordinate to get the correct cell:
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">cell</span> <span class="o">=</span> <span class="n">get_dnd_cell</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="c1">// ...
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">}</span>
+</span></span></code></pre><p>This work on the week cell was done on an old commit that inspired us, <a href="https://gitlab.gnome.org/GNOME/gnome-calendar/-/commit/ee5acbd493ab82ae4f18080dc926b969f1789f93">here</a>. This <code>cell</code> variable is not used on the month implementation. As a result, instead of relying on the widget the mouse is hovering on, the week view grabs the raw x and y and calculates the landing week widget, bypassing UI hierarquies and a child event hijacking the action.</p>
+<p>Do note all of this analysis and suggestion work was done with the help of LLMs. GNOME ecossystem, in general, is against LLM usage (with good reasons) and explicit prohibits AI commits (and also recommends us to not do any work that uses AI instead of the official docs). But since we were not familiar with the ecossystem, it would be way harder to tackle this issue as a starter (yeah, new devs can't code anymore :/), so we limited ourselves to use only as a guide and as a search engine, alongside official docs and codebase, and all of the code work and testing was done by us.</p>
+<h2>Solving the problem</h2>
+<p>To solve this problem, we followed the Week refactor commit approach: move the <code>GtkDropTarget</code> up to the <code>GcalMonthView</code> instead of attaching it to each month cell, aligning what happens on the Week view's architecture. You can see our work <a href="https://gitlab.gnome.org/GNOME/gnome-calendar/-/merge_requests/806/diffs">here</a>, but our main change was this:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// added a get_date_at_position that checks the exact month cell we need to drop onto
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">static</span> <span class="n">GDateTime</span> <span class="o">*</span>
+</span></span><span class="line"><span class="cl"><span class="nf">get_date_at_position</span> <span class="p">(</span><span class="n">GcalMonthView</span> <span class="o">*</span><span class="n">self</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                      <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                      <span class="n">gdouble</span>        <span class="n">y</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">height</span> <span class="o">=</span> <span class="n">gtk_widget_get_height</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">header_height</span> <span class="o">=</span> <span class="n">gtk_widget_get_height</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">header</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">gdouble</span> <span class="n">grid_y</span> <span class="o">=</span> <span class="n">MAX</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span> <span class="o">-</span> <span class="n">header_height</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gdouble</span> <span class="n">grid_height</span> <span class="o">=</span> <span class="n">height</span> <span class="o">-</span> <span class="n">header_height</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gdouble</span> <span class="n">row_height</span> <span class="o">=</span> <span class="n">grid_height</span> <span class="o">/</span> <span class="n">N_ROWS_PER_PAGE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">gint</span> <span class="n">row_idx</span> <span class="o">=</span> <span class="n">floor</span> <span class="p">(</span><span class="n">grid_y</span> <span class="o">/</span> <span class="n">row_height</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">row_idx</span> <span class="o">=</span> <span class="n">CLAMP</span> <span class="p">(</span><span class="n">row_idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">N_ROWS_PER_PAGE</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GtkWidget</span> <span class="o">*</span><span class="n">row_widget</span> <span class="o">=</span> <span class="n">g_ptr_array_index</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">week_rows</span><span class="p">,</span> <span class="n">FIRST_VISIBLE_ROW_INDEX</span> <span class="o">+</span> <span class="n">row_idx</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GtkWidget</span> <span class="o">*</span><span class="n">hovered_cell</span> <span class="o">=</span> <span class="n">gcal_month_view_row_get_cell_at_x</span> <span class="p">(</span><span class="n">GCAL_MONTH_VIEW_ROW</span> <span class="p">(</span><span class="n">row_widget</span><span class="p">),</span> <span class="n">x</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">return</span> <span class="n">g_date_time_ref</span> <span class="p">(</span><span class="n">gcal_month_cell_get_date</span> <span class="p">(</span><span class="n">GCAL_MONTH_CELL</span> <span class="p">(</span><span class="n">hovered_cell</span><span class="p">)));</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">// uses that function inside this new on_drop implementation, similar to what week view uses
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">static</span> <span class="n">gboolean</span>
+</span></span><span class="line"><span class="cl"><span class="n">on_drop_target_drop_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="k">const</span> <span class="n">GValue</span>  <span class="o">*</span><span class="n">value</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">GcalMonthView</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEventWidget</span> <span class="o">*</span><span class="n">event_widget</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">GcalEvent</span> <span class="o">*</span><span class="n">event</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_ENTRY</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">G_VALUE_HOLDS</span> <span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">GCAL_TYPE_EVENT_WIDGET</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">FALSE</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">event_widget</span> <span class="o">=</span> <span class="n">g_value_get_object</span> <span class="p">(</span><span class="n">value</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">event</span> <span class="o">=</span> <span class="n">gcal_event_widget_get_event</span> <span class="p">(</span><span class="n">event_widget</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">g_autoptr</span> <span class="p">(</span><span class="n">GDateTime</span><span class="p">)</span> <span class="n">target_date</span> <span class="o">=</span> <span class="n">get_date_at_position</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="k">if</span> <span class="p">(</span><span class="n">gcal_event_has_recurrence</span> <span class="p">(</span><span class="n">event</span><span class="p">))</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">MonthDropData</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">g_new0</span> <span class="p">(</span><span class="n">MonthDropData</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">self</span> <span class="o">=</span> <span class="n">self</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">event</span> <span class="o">=</span> <span class="n">g_object_ref</span> <span class="p">(</span><span class="n">event</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">data</span><span class="o">-&gt;</span><span class="n">target_date</span> <span class="o">=</span> <span class="n">g_date_time_ref</span> <span class="p">(</span><span class="n">target_date</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">      <span class="n">gcal_utils_ask_recurrence_modification_type</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">event</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">FALSE</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">on_recurrence_response_cb</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                   <span class="n">data</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">  <span class="k">else</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="n">move_event_to_date</span> <span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">target_date</span><span class="p">,</span> <span class="n">GCAL_RECURRENCE_MOD_THIS_ONLY</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd_cell</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_set_visible</span> <span class="p">(</span><span class="n">self</span><span class="o">-&gt;</span><span class="n">dnd_widget</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="n">gtk_widget_queue_allocate</span> <span class="p">(</span><span class="n">GTK_WIDGET</span> <span class="p">(</span><span class="n">self</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">  <span class="n">GCAL_RETURN</span> <span class="p">(</span><span class="n">TRUE</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">
+</span></span></code></pre><p>To mimick <code>get_dnd_cell</code>, we implemented a <code>get_date_at_position</code> function that calculates the exact date using math. Thus, this replaces the reliance on widget hit-boxes and enables the parent container to catch the drop event, without missing the action.</p>
+<p>You can check our MR <a href="https://gitlab.gnome.org/GNOME/gnome-calendar/-/merge_requests/806/diffs">here</a>, as we also needed to implement more things related to the drag and drop functionality.</p>
+<h2>Testing</h2>
+<p>We did not contribute with any unit tests, sadly (kinda hard to do one here). We did some refactors along the way, but eventually we got a working result. My colleague had some problems with their GNOME builder version. But, finally, we got our working result:</p>
+<video class="post-video" controls preload="metadata" playsinline>
+    <source src="https://kaikycintra.com/static/gnome_calendar_working.mp4" type="video/mp4">
+    Your browser does not support embedded video.
+  </video>
+<h2>Submitting</h2>
+<p>As with any open-source project, we had to read how do maintainers expect contributions, commit messages and MRs. We've found some useful guides and the Calendar's own <code>CONTRIBUTING.md</code> and <code>HACKING.md</code> for styles, so that we could streamline and make maintainers' lifes much easier (and also, have a properly accepted patch, which did not occurr with my Linux Patch :/ )</p>
+<p>After opening our MR, Calendar's CI pipeline ran and popped up some warnings on the <code>style-check-diff</code>. Weird.</p>
+<p>We've went through what we might've missed regarding code style, and since job artifacts were not present, we needed to run the style check locally to mimick the job. Then we found the tool <code>.gitlab-ci/clang-format-diffy.py</code>, likely what this job uses. Doing a quick read on it's usage, we could issue the command:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl">git diff -U0 upstream/main <span class="p">|</span> .gitlab-ci/clang-format-diff.py -binary <span class="s2">&#34;clang-format&#34;</span> -p1
+</span></span></code></pre><p>enabling us to check the exact diffs our code had from the upstream (not merged). This returned some real issues that might make maintainers not merge directly (such as whitespaces, indentations, etc), but also some false positives. As an example, <code>HACKING.md</code> has a clear rule on indentation regarding pointers and variables, but <code>clang-format</code> was flagging these and returning what was right to it's perspective:</p>
+<pre tabindex="0" class="chroma"><code><span class="line"><span class="cl"><span class="c1">// note: + lines indicate clang-format recommendation
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span> <span class="k">static</span> <span class="n">GdkDragAction</span>
+</span></span><span class="line"><span class="cl"> <span class="n">on_drop_target_enter_cb</span> <span class="p">(</span><span class="n">GtkDropTarget</span> <span class="o">*</span><span class="n">drop_target</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="o">-</span>                         <span class="n">gdouble</span>        <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="o">-</span>                         <span class="n">gdouble</span>        <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="o">+</span>                         <span class="n">gdouble</span> <span class="n">x</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl"><span class="o">+</span>                         <span class="n">gdouble</span> <span class="n">y</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                          <span class="n">GcalMonthView</span> <span class="o">*</span><span class="n">self</span><span class="p">)</span>
+</span></span></code></pre><p>which clearly violates rules dicated on the project's style convention.</p>
+<p>With this, we've issued our refactored MR, along with some fixes regarding commit message style and MR message style.</p>
+<h2>Wrapping up</h2>
+<p>As of today, we did not receive any feedback regarding a direct MR, but we did receive some labels on our MR by maintainer <a href="https://gitlab.gnome.org/jfft">Jeff</a>. I reckon that since this introduces many new things, it'll take some time for them to review properly. We also received a <em>thumbs up</em> on our message regarding our work on code style checks by <a href="https://gitlab.gnome.org/niklaswimmer">Nick</a>, so at least 2 people saw our MR so far.</p>
+<p>With that in mind, thanks for reading so far! Since I use Linux for my everyday work and gaming, I plan to keep contributing to this beautiful ecossystem.</p>
